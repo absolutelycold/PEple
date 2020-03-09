@@ -21,10 +21,11 @@ bool PEWarrior::cheackPE()
 	this->MyFile->read(binaryBuffer, 2048);
 
 	//First 2 bytes are MZ significant
-	char MZHeader[2];
+	char MZHeader[3];
 	strncpy(MZHeader, binaryBuffer, 2);
-	bool isMZ = strcmp(MZHeader, "MZ");
-	if (isMZ)
+	MZHeader[2] = '\0';
+	int isMZ = strcmp(MZHeader, "MZ");
+	if (isMZ == 0)
 	{
 		cout << "this is mz file\n";
 	}
@@ -33,11 +34,11 @@ bool PEWarrior::cheackPE()
 	char PESybolPosition[1];
 	strncpy(PESybolPosition, binaryBuffer + 60, 1);
 	/*printf("%d \n", (unsigned char)PESybolPosition[0]);*/
-	char PESymbol[2];
+	char PESymbol[3];
 	strncpy(PESymbol, binaryBuffer + (unsigned char)PESybolPosition[0], 2);
-
-	bool isPE = strcmp(PESymbol, "PE");
-	if (isPE)
+	PESymbol[2] = '\0';
+	int isPE = strcmp(PESymbol, "PE");
+	if (isPE == 0)
 	{
 		cout << "this is PE file\n";
 	}
