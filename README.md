@@ -1,5 +1,5 @@
 # PEple
-![PEStructure](https://github.com/absolutelycold/PEple/blob/master/PE Structure.png)
+![PEStructure](https://github.com/absolutelycold/PEple/blob/master/PE%20Structure.png)
 
 ✔ Analyze DOS Header (解析DOS头)
 
