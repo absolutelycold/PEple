@@ -11,8 +11,7 @@ int main()
     cin >> filePath;
     cout << "Your input path: " << filePath << endl;
     PEWarrior peWarrior(filePath);
-    peWarrior.cheackPE();
-
+    //peWarrior.checkPE();
     delete[] filePath;
     return EXIT_SUCCESS;
 }
