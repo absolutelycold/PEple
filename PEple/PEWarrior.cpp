@@ -495,6 +495,24 @@ void PEWarrior::addASection(DWORD size)
 	delete newSectionHeader;
 }
 
+void PEWarrior::combineSectonToOne()
+{
+	// First mofidy the num of section in File Header
+	_IMAGE_FILE_HEADER* fileHeader = peFileHeader.header;
+	fileHeader->NumberOfSections = 1;
+	MyFile->seekp(dosPart.positionOfPESignature + 4);
+	MyFile->write((char*)fileHeader, sizeof(_IMAGE_FILE_HEADER));
+
+	// Modify the info in the first section header
+
+	_IMAGE_SECTION_HEADER* sectionHeader = sectionTables.tableArray;
+	sectionHeader->SizeOfRawData = (sectionTables.tableArray[sectionTables.numberOfSections - 1].PointerToRawData + sectionTables.tableArray[sectionTables.numberOfSections - 1].SizeOfRawData) - sectionHeader->PointerToRawData;
+	sectionHeader->Misc.VirtualSize = peOptionalHeader.sizeOfImage - sectionHeader->VirtualAddress;
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER) + peFileHeader.sizeOfOptionalHeader);
+	MyFile->write((char*)sectionHeader, sizeof(_IMAGE_SECTION_HEADER));
+
+}
+
 DWORD PEWarrior::findInjectableSection(int size)
 {
 

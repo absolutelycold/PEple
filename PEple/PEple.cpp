@@ -15,8 +15,15 @@ int main()
     //peWarrior.checkPE();
     //peWarrior.extendLastSection(0x50);
     //peWarrior.injectMessageBoxA32AtEnd(0x76cc0c30);
-    peWarrior.addASection(0x600);
-    delete[] filePath;
+    //peWarrior.addASection(0x600);
+    //peWarrior.combineSectonToOne();
+    //delete[] filePath;
+    //peWarrior.setSectionCharacteristic(0, 6, 1);
+    //peWarrior.setSectionCharacteristic(0, 7, 1);
+    //peWarrior.setSectionCharacteristic(0, 6, 1);
+    //peWarrior.setSectionCharacteristic(0, 29, 1);
+    //peWarrior.setSectionCharacteristic(0, 30, 1);
+    //peWarrior.setSectionCharacteristic(0, 31, 1);
     return EXIT_SUCCESS;
 }
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu

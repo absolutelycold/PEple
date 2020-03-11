@@ -23,6 +23,8 @@
 
 ✔ Add our own section (添加自己的节)
 
+✔ Combine all sections into one (合并所有节为1个节)
+
 Pending:
 
 ✖ other Inject Code (其它类型的代码注入)

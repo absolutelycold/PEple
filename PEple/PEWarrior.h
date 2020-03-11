@@ -23,6 +23,7 @@ public:
 	void setSectionCharacteristic(int indexOfTable, int indeOfBit, int value);
 	void extendLastSection(int size);
 	void addASection(DWORD size);
+	void combineSectonToOne();
 	virtual ~PEWarrior();
 private:
 	class DOSPart
