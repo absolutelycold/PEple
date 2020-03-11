@@ -15,6 +15,9 @@ public:
 	PEWarrior(char* filePath);
 	bool checkPE();
 	int RVAToFOA(DWORD rva);
+	DWORD FOAToRVA(DWORD foa);
+	void injectCode(DWORD funAddress);
+	void modifyEntryPoint(DWORD newEntryPoint);
 	virtual ~PEWarrior();
 private:
 	class DOSPart
@@ -111,5 +114,6 @@ private:
 	bool getSectionHeader();
 	void printTime(WORD timeStamp);
 	void reverseDllCharcateristic(int position);
+	DWORD findInjectableSection(int size);
 
 };

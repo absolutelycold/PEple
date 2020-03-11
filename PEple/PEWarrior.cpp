@@ -20,10 +20,16 @@ PEWarrior::PEWarrior(char* filePath)
 		getPEOptionHeader();
 		cout << "------------------------------------------------------------\n" << endl;
 		getSectionHeader();
-		reverseDllCharcateristic(6);
-
+		BYTE shellCode[] = { 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0xE8, 0x7A, 0x09, 0x8C, 0x76 };
+		//reverseDllCharcateristic(6);
+		injectCode(0x76CC0C30);
 		//DWORD FOA = RVAToFOA(0x00404018);
 		//cout << "FOA: " << hex << FOA << endl;
+		DWORD injectPointer = findInjectableSection(30);
+		cout << "Injectable Section: " << hex << injectPointer << endl;
+		DWORD injectPointerInMem = FOAToRVA(injectPointer);
+		cout << "Inject Point in Mem: " << hex << injectPointerInMem;
+
 	}
 }
 
@@ -116,6 +122,23 @@ int PEWarrior::RVAToFOA(DWORD rva)
 	}
 
 	return -1;
+}
+
+DWORD PEWarrior::FOAToRVA(DWORD foa)
+{
+	if (foa < peOptionalHeader.sizeOfHeaders)
+	{
+		return foa;
+	}
+	
+	for (int i = 0; i < sectionTables.numberOfSections; i++)
+	{
+		if ((foa >= sectionTables.tableArray[i].PointerToRawData) && (foa < (sectionTables.tableArray[i].PointerToRawData + sectionTables.tableArray[i].SizeOfRawData)))
+		{
+			DWORD RAVInTheSection = foa - sectionTables.tableArray[i].PointerToRawData;
+			return sectionTables.tableArray[i].VirtualAddress + RAVInTheSection;
+		}
+	}
 }
 
 PEWarrior::~PEWarrior()
@@ -330,6 +353,94 @@ void PEWarrior::reverseDllCharcateristic(int position)
 	((_IMAGE_OPTIONAL_HEADER64*)optionalHeaderAddress)->DllCharacteristics = (WORD)characteristicBits.to_ulong();
 	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
 	MyFile->write((char*)optionalHeaderAddress, peFileHeader.sizeOfOptionalHeader);
+}
+
+DWORD PEWarrior::findInjectableSection(int size)
+{
+	for (int i = 0; i < peFileHeader.numberOfSection; i++)
+	{
+		if (sectionTables.tableArray[i].Misc.VirtualSize < sectionTables.tableArray[i].SizeOfRawData)
+		{
+			if (sectionTables.tableArray[i].SizeOfRawData - sectionTables.tableArray[i].Misc.VirtualSize >= size)
+			{
+				return (sectionTables.tableArray[i].PointerToRawData + sectionTables.tableArray[i].Misc.VirtualSize);
+			}
+		}
+	}
+}
+
+void PEWarrior::injectCode(DWORD funAddress) // Only support 32 bit exe
+{
+
+	//find where can inject code
+	DWORD injectableFOA = findInjectableSection(50);
+	DWORD injectableRAV = FOAToRVA(injectableFOA);
+	MyFile->seekp(injectableFOA);
+	//Inject Code Here:
+
+	BYTE code[13];
+	code[0] = 0x6A;
+	code[1] = 0x00;
+	code[2] = 0x6A;
+	code[3] = 0x00;
+	code[4] = 0x6A;
+	code[5] = 0x00;
+	code[6] = 0x6A;
+	code[7] = 0x00;
+	code[8] = 0xe8;
+
+	DWORD callDestination = funAddress - (peOptionalHeader.baseAddress + injectableRAV + 8) - 5;
+
+	for (int i = 0; i < 4; i++)
+	{
+		code[9 + i] = ((char*)(&callDestination))[i];
+	}
+
+	for (int i = 0; i < sizeof(code); i++)
+	{
+		MyFile->write((char*)(code + i), 1);
+	}
+
+	//Inject jump back to the previous entry point code:
+	DWORD jumpInstructionAddress = peOptionalHeader.baseAddress + injectableRAV + sizeof(code);
+	DWORD memoryEntryAddress = peOptionalHeader.baseAddress + peOptionalHeader.addressOfEntryPoint;
+	DWORD jumpDestination = memoryEntryAddress - jumpInstructionAddress - 5;
+
+	BYTE jumpBack[5];
+	memset(&jumpBack, 0, 5);
+	jumpBack[0] = 0xE9;
+	for (int i = 0; i < 4; i++)
+	{
+		jumpBack[1+i] = ((BYTE*)&jumpDestination)[i];
+	}
+
+	MyFile->write((char*)jumpBack, 5);
+
+	//Change the entry point to new entry point
+
+	_IMAGE_OPTIONAL_HEADER* optionalHeader = (_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder());
+	optionalHeader->AddressOfEntryPoint = injectableRAV;
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
+	MyFile->write((char*)optionalHeader, peFileHeader.sizeOfOptionalHeader);
+	// The reanson +1 is that the address of the instruction is the address of the firt byte.
+	
+
+}
+
+void PEWarrior::modifyEntryPoint(DWORD newEntryPoint)
+{
+	if (peFileHeader.machine == 0x14c)
+	{
+		// 32 bit
+		((_IMAGE_OPTIONAL_HEADER*)peOptionalHeader.getHeaeder())->AddressOfEntryPoint = newEntryPoint;
+	}
+	else {
+		// 64 bit
+		((_IMAGE_OPTIONAL_HEADER64*)peOptionalHeader.getHeaeder())->AddressOfEntryPoint = newEntryPoint;
+	}
+
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
+	MyFile->write((char*)peOptionalHeader.getHeaeder(), peFileHeader.sizeOfOptionalHeader);
 }
 
 
