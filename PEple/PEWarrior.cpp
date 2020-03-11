@@ -189,7 +189,7 @@ bool PEWarrior::getPEFileHeader()
 	
 	char* PEFileHeaderBuffer = new char[peFileHeader.sizeOfFileHeader];
 	
-	
+	peFileHeader.header = (IMAGE_FILE_HEADER*)PEFileHeaderBuffer;
 	MyFile->seekg(dosPart.positionOfPESignature);
 	// The first 4 Bytes is PE signature
 	MyFile->read((char*)&currentPESignature, sizeof(DWORD));
@@ -216,7 +216,6 @@ bool PEWarrior::getPEFileHeader()
 	cout << "Sections: " << peFileHeader.numberOfSection << endl;
 	peFileHeader.timeStamp = ((_IMAGE_FILE_HEADER*)PEFileHeaderBuffer)->TimeDateStamp;
 	peFileHeader.characteristics = ((_IMAGE_FILE_HEADER*)PEFileHeaderBuffer)->Characteristics;
-	delete[] PEFileHeaderBuffer;
 	return true;
 }
 
@@ -391,9 +390,6 @@ void PEWarrior::extendLastSection(int size)
 	MyFile->close();
 	MyFile->open(filepath, ios::in | ios::out | ios::binary);
 
-	// Change the setting of Section table
-	// Set Last Section runable
-	// setSectionCharacteristic(sectionTables.numberOfSections - 1, 29, 1);
 	// Change the size of rawdata/virtula size
 	int finalSize;
 	if (sectionTables.tableArray[sectionTables.numberOfSections - 1].SizeOfRawData >= sectionTables.tableArray[sectionTables.numberOfSections - 1].Misc.VirtualSize)
@@ -441,6 +437,62 @@ void PEWarrior::extendLastSection(int size)
 	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
 	MyFile->write((char*)(peOptionalHeader.getHeaeder()), peFileHeader.sizeOfOptionalHeader);
 	delete[] newMemory;
+}
+
+void PEWarrior::addASection(DWORD size)
+{
+	DWORD lastSectionFOA = dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER) + peFileHeader.sizeOfOptionalHeader + (sectionTables.numberOfSections * sizeof(_IMAGE_SECTION_HEADER));
+	//add a section in fileheader
+	(peFileHeader.header)->NumberOfSections = peFileHeader.numberOfSection + 1;
+	MyFile->seekp(dosPart.positionOfPESignature + 4);
+	MyFile->write((char*)peFileHeader.header, sizeof(_IMAGE_FILE_HEADER));
+
+	//construct a section header
+	_IMAGE_SECTION_HEADER* newSectionHeader = new _IMAGE_SECTION_HEADER;
+	memset(newSectionHeader, 0, sizeof(_IMAGE_SECTION_HEADER));
+
+	newSectionHeader->Characteristics = 0x60000020;
+	(newSectionHeader->Name)[0] = '.';
+	(newSectionHeader->Name)[1] = 'k';
+	(newSectionHeader->Name)[2] = 'i';
+	(newSectionHeader->Name)[3] = 's';
+	(newSectionHeader->Name)[4] = 's';
+	//DWORD sizeAftermMemoryAlignment = ((size / peOptionalHeader.memoryAlignment) + 1) * peOptionalHeader.memoryAlignment;
+	(newSectionHeader->Misc).VirtualSize = size;
+	DWORD pointerToNewRawData = sectionTables.tableArray[sectionTables.numberOfSections - 1].PointerToRawData + sectionTables.tableArray[sectionTables.numberOfSections - 1].SizeOfRawData;
+	newSectionHeader->PointerToRawData = pointerToNewRawData;
+	DWORD newVirtualAddress = sectionTables.tableArray[sectionTables.numberOfSections - 1].VirtualAddress + (peOptionalHeader.memoryAlignment * ((sectionTables.tableArray[sectionTables.numberOfSections - 1].Misc.VirtualSize / peOptionalHeader.memoryAlignment) + 1));
+	newSectionHeader->VirtualAddress = newVirtualAddress;
+	//newSectionHeader->SizeOfRawData = ((size / peOptionalHeader.fileAlignment) + 1) * peOptionalHeader.fileAlignment;
+	newSectionHeader->SizeOfRawData = size;
+
+	// Write the new table to file
+	MyFile->seekp(lastSectionFOA);
+	MyFile->write((char*)newSectionHeader, sizeof(_IMAGE_SECTION_HEADER));
+
+	// Modify the ImageSize
+	if (peFileHeader.machine == 0x14c)
+	{
+		((_IMAGE_OPTIONAL_HEADER*)peOptionalHeader.getHeaeder())->SizeOfImage = peOptionalHeader.sizeOfImage + ((size / peOptionalHeader.memoryAlignment) + 1) * peOptionalHeader.memoryAlignment;
+	}
+	else {
+		((_IMAGE_OPTIONAL_HEADER64*)peOptionalHeader.getHeaeder())->SizeOfImage = peOptionalHeader.sizeOfImage + ((size / peOptionalHeader.memoryAlignment) + 1) * peOptionalHeader.memoryAlignment;
+	}
+
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
+	MyFile->write((char*)(peOptionalHeader.getHeaeder()), peFileHeader.sizeOfOptionalHeader);
+
+	// Append the new space for new section
+	MyFile->close();
+	MyFile->open(filepath, ios::app | ios::out | ios::binary);
+	BYTE* newMemory = new BYTE[size];
+	memset(newMemory, 0, size);
+	MyFile->write((char*)newMemory, size);
+	MyFile->close();
+	MyFile->open(filepath, ios::in | ios::out | ios::binary);
+
+	delete[] newMemory;
+	delete newSectionHeader;
 }
 
 DWORD PEWarrior::findInjectableSection(int size)

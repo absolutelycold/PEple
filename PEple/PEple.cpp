@@ -13,8 +13,9 @@ int main()
     PEWarrior peWarrior(filePath);
     //peWarrior.modifyEntryPoint(0x1180);
     //peWarrior.checkPE();
-    //peWarrior.extendLastSection(0x1000);
-    peWarrior.injectMessageBoxA32AtEnd(0x76cc0c30);
+    //peWarrior.extendLastSection(0x50);
+    //peWarrior.injectMessageBoxA32AtEnd(0x76cc0c30);
+    peWarrior.addASection(0x600);
     delete[] filePath;
     return EXIT_SUCCESS;
 }

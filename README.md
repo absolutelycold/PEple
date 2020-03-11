@@ -19,6 +19,10 @@
 
 ✔ 32 bit Code Injection in blank space (32位空白区注入)
 
+✔ Expend section area (扩展节的大小)
+
+✔ Add our own section (添加自己的节)
+
 Pending:
 
 ✖ other Inject Code (其它类型的代码注入)

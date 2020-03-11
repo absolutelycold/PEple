@@ -22,6 +22,7 @@ public:
 	void setDllCharcateristic(int position, int value);
 	void setSectionCharacteristic(int indexOfTable, int indeOfBit, int value);
 	void extendLastSection(int size);
+	void addASection(DWORD size);
 	virtual ~PEWarrior();
 private:
 	class DOSPart
@@ -52,9 +53,13 @@ private:
 		WORD timeStamp;
 		WORD sizeOfOptionalHeader;
 		WORD characteristics;
+		_IMAGE_FILE_HEADER* header;
 
 		PEFileHeader() {
 
+		}
+		~PEFileHeader() {
+			delete[] header;
 		}
 	private:
 
