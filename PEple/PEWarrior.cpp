@@ -4,6 +4,8 @@
 PEWarrior::PEWarrior(char* filePath)
 {
 	this->MyFile->open(filePath, ios::binary | ios::in | ios::out);
+	strcpy(this->filepath, filePath);
+	cout << "File Path: " << this->filepath << endl;
 	if (!this->MyFile->is_open())
 	{
 		cout << "Cannot open the file.\n";
@@ -21,15 +23,16 @@ PEWarrior::PEWarrior(char* filePath)
 		cout << "------------------------------------------------------------\n" << endl;
 		getSectionHeader();
 		BYTE shellCode[] = { 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0xE8, 0x7A, 0x09, 0x8C, 0x76 };
-		//reverseDllCharcateristic(6);
-		injectCode(0x76CC0C30);
+		//setDllCharcateristic(6, 1);
+		//injectCode32(0x76CC0C30);
 		//DWORD FOA = RVAToFOA(0x00404018);
 		//cout << "FOA: " << hex << FOA << endl;
+		//setSectionCharacteristic(sectionTables.numberOfSections - 1, 29, 1);
 		DWORD injectPointer = findInjectableSection(30);
 		cout << "Injectable Section: " << hex << injectPointer << endl;
 		DWORD injectPointerInMem = FOAToRVA(injectPointer);
 		cout << "Inject Point in Mem: " << hex << injectPointerInMem;
-
+		
 	}
 }
 
@@ -143,7 +146,7 @@ DWORD PEWarrior::FOAToRVA(DWORD foa)
 
 PEWarrior::~PEWarrior()
 {
-	delete MyFile;
+	MyFile->close();
 }
 
 int PEWarrior::getHex(char* address, int size)
@@ -296,13 +299,14 @@ bool PEWarrior::getSectionHeader()
 	sectionTables.setArrayStartAddress((_IMAGE_SECTION_HEADER*)tablesAddress);
 	for (int i = 0; i < sectionTables.numberOfSections; i++)
 	{
+		bitset<32> charac(sectionTables.tableArray[i].Characteristics);
 		cout << "------------------------------------------------------------" << endl;
 		cout << "Section: " << sectionTables.tableArray[i].Name << endl;
 		cout << "Entry in Memory: " << sectionTables.tableArray[i].VirtualAddress << endl;
 		cout << "True Size in Memory: " << sectionTables.tableArray[i].Misc.VirtualSize << endl;
 		cout << "Entry in File: " << sectionTables.tableArray[i].PointerToRawData << endl;
 		cout << "Alignemnt Size in the file: " << sectionTables.tableArray[i].SizeOfRawData << endl;
-		cout << "Characristic: " << hex << sectionTables.tableArray[i].Characteristics << endl;
+		cout << "Characristic: " << charac << endl;
 		cout << "------------------------------------------------------------" << endl;
 	}
 	return false;
@@ -318,7 +322,7 @@ void PEWarrior::printTime(WORD timeStamp)
 	strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S", structuredTime);
 }
 
-void PEWarrior::reverseDllCharcateristic(int position)
+void PEWarrior::setDllCharcateristic(int position, int value)
 {
 	if (!MyFile->is_open())
 	{
@@ -328,7 +332,10 @@ void PEWarrior::reverseDllCharcateristic(int position)
 	{
 		return;
 	}
-
+	if (value < 0 || value > 1)
+	{
+		return;
+	}
 	void* optionalHeaderAddress = peOptionalHeader.getHeaeder();
 
 	WORD dllChracteristic;
@@ -342,21 +349,103 @@ void PEWarrior::reverseDllCharcateristic(int position)
 	}
 
 	bitset<16> characteristicBits(dllChracteristic);
-	if (characteristicBits[position] == 0)
-	{
-		characteristicBits[position] = 1;
-	}
-	else {
-		characteristicBits[position] = 0;
-	}
+	characteristicBits[position] = value;
 
 	((_IMAGE_OPTIONAL_HEADER64*)optionalHeaderAddress)->DllCharacteristics = (WORD)characteristicBits.to_ulong();
 	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
 	MyFile->write((char*)optionalHeaderAddress, peFileHeader.sizeOfOptionalHeader);
 }
 
+void PEWarrior::setSectionCharacteristic(int indexOfTable, int indexOfBit, int value)
+{
+	if (indexOfTable >= sectionTables.numberOfSections)
+	{
+		return;
+	}
+	if (indexOfBit >= 32)
+	{
+		return;
+	}
+	if (value != 0 && value != 1)
+	{
+		return;
+	}
+	_IMAGE_SECTION_HEADER* sectionHeader = sectionTables.tableArray + indexOfTable;
+	bitset<32> character(sectionHeader->Characteristics);
+	//cout << "Section " << indexOfTable << " Charac is: " << character << endl;
+	character[indexOfBit] = value;
+	sectionHeader->Characteristics = (DWORD)character.to_ulong();
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER) + peFileHeader.sizeOfOptionalHeader + sizeof(_IMAGE_SECTION_HEADER) * (indexOfTable));
+	MyFile->write((char*)sectionHeader, sizeof(_IMAGE_SECTION_HEADER));
+}
+
+void PEWarrior::extendLastSection(int size)
+{
+	//First seek to the end of the file
+	
+	MyFile->close();
+	MyFile->open(filepath, ios::out | ios::app | ios::binary);
+	char* newMemory = new char[size];
+	memset(newMemory, 0, size);
+	MyFile->write(newMemory, size);
+	MyFile->close();
+	MyFile->open(filepath, ios::in | ios::out | ios::binary);
+
+	// Change the setting of Section table
+	// Set Last Section runable
+	// setSectionCharacteristic(sectionTables.numberOfSections - 1, 29, 1);
+	// Change the size of rawdata/virtula size
+	int finalSize;
+	if (sectionTables.tableArray[sectionTables.numberOfSections - 1].SizeOfRawData >= sectionTables.tableArray[sectionTables.numberOfSections - 1].Misc.VirtualSize)
+	{
+		finalSize = sectionTables.tableArray[sectionTables.numberOfSections - 1].SizeOfRawData + size;
+	}
+	else
+	{
+		// alignment of VirtualSize:
+		DWORD virtualSizeAfterAlignment = peOptionalHeader.memoryAlignment * ((sectionTables.tableArray[sectionTables.numberOfSections - 1].Misc.VirtualSize / peOptionalHeader.memoryAlignment) + 1);
+		finalSize = virtualSizeAfterAlignment + size;
+	}
+
+	//Change the size to final size
+	sectionTables.tableArray[sectionTables.numberOfSections - 1].SizeOfRawData = finalSize;
+	sectionTables.tableArray[sectionTables.numberOfSections - 1].Misc.VirtualSize = finalSize;
+	// Write to file
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER) + peFileHeader.sizeOfOptionalHeader);
+	MyFile->write((char*)(sectionTables.tableArray), sizeof(_IMAGE_SECTION_HEADER) * sectionTables.numberOfSections);
+
+	//Change the size of Image Size
+
+	
+	DWORD previousSize = peOptionalHeader.sizeOfImage;
+	DWORD previousSizeAfterAlignment;
+	//align the image size
+	if ((previousSize % peOptionalHeader.memoryAlignment) == 0)
+	{
+		previousSizeAfterAlignment = previousSize;
+	}
+	else
+	{
+		previousSizeAfterAlignment = peOptionalHeader.memoryAlignment * ((previousSize / peOptionalHeader.memoryAlignment) + 1);
+	}
+	DWORD finalImageSize = previousSizeAfterAlignment + size;
+	if (peFileHeader.machine == 0x14)
+	{
+		((_IMAGE_OPTIONAL_HEADER*)peOptionalHeader.getHeaeder())->SizeOfImage = finalImageSize;
+	}
+	else {
+		((_IMAGE_OPTIONAL_HEADER64*)peOptionalHeader.getHeaeder())->SizeOfImage = finalImageSize;
+	}
+
+	//Write to file:
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
+	MyFile->write((char*)(peOptionalHeader.getHeaeder()), peFileHeader.sizeOfOptionalHeader);
+	delete[] newMemory;
+}
+
 DWORD PEWarrior::findInjectableSection(int size)
 {
+
 	for (int i = 0; i < peFileHeader.numberOfSection; i++)
 	{
 		if (sectionTables.tableArray[i].Misc.VirtualSize < sectionTables.tableArray[i].SizeOfRawData)
@@ -369,7 +458,7 @@ DWORD PEWarrior::findInjectableSection(int size)
 	}
 }
 
-void PEWarrior::injectCode(DWORD funAddress) // Only support 32 bit exe
+void PEWarrior::injectMessageBoxA32(DWORD funAddress) // Only support 32 bit exe
 {
 
 	//find where can inject code
@@ -424,6 +513,66 @@ void PEWarrior::injectCode(DWORD funAddress) // Only support 32 bit exe
 	MyFile->write((char*)optionalHeader, peFileHeader.sizeOfOptionalHeader);
 	// The reanson +1 is that the address of the instruction is the address of the firt byte.
 	
+
+}
+
+//?????????????????????????????????????????????????????????????????????????????????????
+// How to set template to different type???????????????????????????????????????????????
+//?????????????????????????????????????????????????????????????????????????????????????
+void PEWarrior::injectMessageBoxA32AtEnd(DWORD funAddress)
+{
+
+	BYTE code[13];
+	code[0] = 0x6A;
+	code[1] = 0x00;
+	code[2] = 0x6A;
+	code[3] = 0x00;
+	code[4] = 0x6A;
+	code[5] = 0x00;
+	code[6] = 0x6A;
+	code[7] = 0x00;
+	code[8] = 0xe8;
+
+	DWORD virtualSizeBeforeExtend = sectionTables.tableArray[sectionTables.numberOfSections - 1].Misc.VirtualSize;
+	// extend to last section
+	extendLastSection(0x200);
+
+	setSectionCharacteristic(sectionTables.numberOfSections - 1, 29, 1);
+	// find a place to insert code
+	DWORD FOAToInsert = sectionTables.tableArray[sectionTables.numberOfSections - 1].PointerToRawData + virtualSizeBeforeExtend;
+	DWORD RVAOfInsertion = FOAToRVA(FOAToInsert);
+
+	DWORD callDestini = funAddress - (peOptionalHeader.baseAddress + RVAOfInsertion + 8) - 5;
+	*(DWORD*)(code + 9) = callDestini;
+	MyFile->seekp(FOAToInsert);
+	MyFile->write((char*)code, sizeof(code));
+
+	BYTE jumpCode[5];
+	jumpCode[0] = 0xe9;
+
+	DWORD jumpInsertionFOA = FOAToInsert + sizeof(code);
+	DWORD jumpInsertionRVA = FOAToRVA(jumpInsertionFOA);
+	DWORD currentEntryPoint = peOptionalHeader.baseAddress + peOptionalHeader.addressOfEntryPoint;
+	DWORD jumpDestini = currentEntryPoint - (peOptionalHeader.baseAddress + jumpInsertionRVA) - 5;
+	*((DWORD*)(jumpCode + 1)) = jumpDestini;
+
+	// Write jump code:
+	MyFile->seekp(jumpInsertionFOA);
+	MyFile->write((char*)jumpCode, sizeof(jumpCode));
+
+	// Write new entry point
+	if (peFileHeader.machine == 0x14)
+	{
+		// 32 bit
+		((_IMAGE_OPTIONAL_HEADER*)peOptionalHeader.getHeaeder())->AddressOfEntryPoint = RVAOfInsertion;
+	}
+	else {
+		((_IMAGE_OPTIONAL_HEADER64*)peOptionalHeader.getHeaeder())->AddressOfEntryPoint = RVAOfInsertion;
+	}
+	
+	//Write entry point
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
+	MyFile->write((char*)(peOptionalHeader.getHeaeder()), peFileHeader.sizeOfOptionalHeader);
 
 }
 

@@ -16,8 +16,12 @@ public:
 	bool checkPE();
 	int RVAToFOA(DWORD rva);
 	DWORD FOAToRVA(DWORD foa);
-	void injectCode(DWORD funAddress);
+	void injectMessageBoxA32(DWORD funAddress);
+	void injectMessageBoxA32AtEnd(DWORD funAddress);
 	void modifyEntryPoint(DWORD newEntryPoint);
+	void setDllCharcateristic(int position, int value);
+	void setSectionCharacteristic(int indexOfTable, int indeOfBit, int value);
+	void extendLastSection(int size);
 	virtual ~PEWarrior();
 private:
 	class DOSPart
@@ -69,7 +73,7 @@ private:
 		DWORD checkSum;
 		DWORD dllCharacteristic;
 		PEOptionHeader() {
-
+			
 		}
 		~PEOptionHeader() {
 			delete[] peOptionalHeader;
@@ -98,6 +102,7 @@ private:
 		
 	};
 
+	char filepath[1024];
 	int pESignatureAddress;
 	int sizeOfImageOptionalHeader;
 	DWORD currentPESignature;
@@ -113,7 +118,7 @@ private:
 	bool getPEOptionHeader();
 	bool getSectionHeader();
 	void printTime(WORD timeStamp);
-	void reverseDllCharcateristic(int position);
+	
 	DWORD findInjectableSection(int size);
 
 };

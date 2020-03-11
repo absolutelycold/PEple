@@ -11,13 +11,13 @@
 
 ✔ Enable/Disable DllCharacteristic (you can disable/enable Program Dynamic Base, checksum and more...) （修改软件DllCharacteristic设置: 关闭/打开动态基址，checksum检测等...）
 
-✔ convert RVA to FOA (内存相对地址转换成文件相对位置)
+✔ Enable/Disable Section Characteristic (enable/disable writbale, readable, .....) (设置块属性，比如设置可读可写等等)
 
 ✔ FOA to RVA (文件相对位置转换内存相对地址)
 
 ✔ RVA to FOA （内存相对位置转换文件相对位置）
 
-✔ Code Injection in blank space (空白区注入)
+✔ 32 bit Code Injection in blank space (32位空白区注入)
 
 Pending:
 
