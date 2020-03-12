@@ -690,8 +690,13 @@ bool PEWarrior::getRelocateTable()
 		entryOfRelocateDirectoryRVA = ((_IMAGE_OPTIONAL_HEADER64*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress;
 
 	}
+	if (entryOfRelocateDirectoryRVA == 0)
+	{
 
+		return false;
+	}
 	DWORD entryOfRelocateDirectoryFOA = RVAToFOA(entryOfRelocateDirectoryRVA);
+	relocateDirectory.VirtualAddress = entryOfRelocateDirectoryRVA;
 	_IMAGE_BASE_RELOCATION* relocationTable = new _IMAGE_BASE_RELOCATION;
 	DWORD base;
 	DWORD sizeOfBlock = 0;
@@ -700,7 +705,9 @@ bool PEWarrior::getRelocateTable()
 	{
 		cout << "----------------------------------------------------" << endl;
 		MyFile->seekg(currentTableStartFOA);
-		MyFile->read((char*)relocationTable, sizeof(_IMAGE_BASE_RELOCATION));
+		if (!MyFile->read((char*)relocationTable, sizeof(_IMAGE_BASE_RELOCATION))) {
+			return false;
+		}
 		base = relocationTable->VirtualAddress;
 		sizeOfBlock = relocationTable->SizeOfBlock;
 
@@ -718,7 +725,9 @@ bool PEWarrior::getRelocateTable()
 			cout << "Items: " << numberOfOffset << endl;
 			WORD* offsetArray = new WORD[numberOfOffset];
 			MyFile->seekg(currentTableStartFOA + 8);
-			MyFile->read((char*)offsetArray, 2 * numberOfOffset);
+			if (!MyFile->read((char*)offsetArray, 2 * numberOfOffset)) {
+				return false;
+			}
 			for (int i = 0; i < numberOfOffset; i++)
 			{
 				bitset<16> item(offsetArray[i]);
