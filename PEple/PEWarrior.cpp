@@ -4,7 +4,9 @@
 PEWarrior::PEWarrior(char* filePath)
 {
 	this->MyFile->open(filePath, ios::binary | ios::in | ios::out);
+	memset(&filepath, 0, 1024);
 	strcpy(this->filepath, filePath);
+	bakFile();
 	cout << "File Path: " << this->filepath << endl;
 	if (!this->MyFile->is_open())
 	{
@@ -511,6 +513,69 @@ void PEWarrior::combineSectonToOne()
 	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER) + peFileHeader.sizeOfOptionalHeader);
 	MyFile->write((char*)sectionHeader, sizeof(_IMAGE_SECTION_HEADER));
 
+}
+
+void PEWarrior::inject32(DWORD startFOA, BYTE* shellcode, DWORD length)
+{
+	// Reload file to upadte info
+	reloadFile();
+
+	// 
+	DWORD ImageBase = peOptionalHeader.baseAddress;
+	DWORD EntryRVA = peOptionalHeader.addressOfEntryPoint;
+	DWORD startRVA = FOAToRVA(startFOA);
+
+	// write inject code into file:
+	MyFile->seekp(startFOA);
+	for (int i = 0; i < length; i++)
+	{
+		MyFile->write((char*)(shellcode + i), 1);
+	}
+
+	// Change entry RVA to startRVA
+	((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->AddressOfEntryPoint = startRVA;
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
+	MyFile->write((char*)(peOptionalHeader.getHeaeder()), peFileHeader.sizeOfOptionalHeader);
+
+	// jump back to original entry point
+	BYTE jumpCode[5];
+	jumpCode[0] = 0xe9;
+
+	DWORD destini = (ImageBase + EntryRVA) - (ImageBase + startRVA + length) - 5;
+
+	*(DWORD*)(jumpCode + 1) = destini;
+
+	MyFile->seekp(startFOA + length);
+	MyFile->write((char*)jumpCode, 5);
+
+}
+
+void PEWarrior::reloadFile()
+{
+	MyFile->close();
+	MyFile->open(filepath, ios::in | ios::out | ios::binary);
+	getDOSHeader();
+	getPEFileHeader();
+	getPEOptionHeader();
+	getSectionHeader();
+}
+
+void PEWarrior::bakFile()
+{
+	string fileName(filepath);
+	char buffer;
+	ofstream* outFile = new ofstream;
+	outFile->open(fileName + ".bak", ios::binary | ios::out);
+
+	MyFile->seekg(ios::beg);
+	while (MyFile->get(buffer))
+	{
+		outFile->write(&buffer, 1);
+	}
+	outFile->close();
+	MyFile->close();
+	MyFile->open(filepath, ios::in | ios::out | ios::binary);
+	
 }
 
 DWORD PEWarrior::findInjectableSection(int size)

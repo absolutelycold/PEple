@@ -24,6 +24,10 @@ public:
 	void extendLastSection(int size);
 	void addASection(DWORD size);
 	void combineSectonToOne();
+	void inject32(DWORD startFOA, BYTE* shellcode, DWORD length);
+	void reloadFile();
+	void bakFile();
+
 	virtual ~PEWarrior();
 private:
 	class DOSPart
