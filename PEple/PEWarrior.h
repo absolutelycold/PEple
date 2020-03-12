@@ -1,3 +1,7 @@
+// Author: Absolutelycold
+// https://github.com/absolutelycold
+// Date: 03/08/2020
+
 #pragma once
 #define _CRT_SECURE_NO_WARNINGS
 #include <iostream>
@@ -12,24 +16,6 @@ class PEWarrior
 {
 
 public:
-	PEWarrior(char* filePath);
-	bool checkPE();
-	int RVAToFOA(DWORD rva);
-	DWORD FOAToRVA(DWORD foa);
-	void injectMessageBoxA32(DWORD funAddress);
-	void injectMessageBoxA32AtEnd(DWORD funAddress);
-	void modifyEntryPoint(DWORD newEntryPoint);
-	void setDllCharcateristic(int position, int value);
-	void setSectionCharacteristic(int indexOfTable, int indeOfBit, int value);
-	void extendLastSection(int size);
-	void addASection(DWORD size);
-	void combineSectonToOne();
-	void inject32(DWORD startFOA, BYTE* shellcode, DWORD length);
-	void reloadFile();
-	void bakFile();
-
-	virtual ~PEWarrior();
-private:
 	class DOSPart
 	{
 	public:
@@ -45,7 +31,7 @@ private:
 
 		}
 	private:
-		
+
 	};
 
 	class PEFileHeader
@@ -83,14 +69,14 @@ private:
 		DWORD checkSum;
 		DWORD dllCharacteristic;
 		PEOptionHeader() {
-			
+
 		}
 		~PEOptionHeader() {
 			delete[] peOptionalHeader;
 		}
 		void setHeader(void* headerAddress);
 		void* getHeaeder();
-		
+
 	private:
 		void* peOptionalHeader;
 	};
@@ -98,7 +84,7 @@ private:
 	class SectionTables
 	{
 	public:
-		
+
 		_IMAGE_SECTION_HEADER* tableArray;
 		int numberOfSections;
 		SectionTables() {
@@ -109,17 +95,61 @@ private:
 		void setArrayStartAddress(_IMAGE_SECTION_HEADER* tablesAddress);
 		void setNumberOfSections(int num);
 	private:
-		
+
 	};
 
-	char filepath[1024];
-	int pESignatureAddress;
-	int sizeOfImageOptionalHeader;
+	class ExportDirectory
+	{
+	public:
+		_IMAGE_EXPORT_DIRECTORY* Directory;
+		DWORD RVAOfDllName;
+		DWORD RVAOfFAT;
+		DWORD RVAOfFNT;
+		DWORD RVAOfFOT;
+		DWORD Base;
+		DWORD NumberOfFunctions;
+		DWORD NumberOfNames;
+		DWORD* FNT;
+		WORD* FOT;
+		DWORD* FAT;
+
+		~ExportDirectory();
+
+	private:
+
+	};
+
 	DWORD currentPESignature;
 	DOSPart dosPart;
 	PEFileHeader peFileHeader;
 	PEOptionHeader peOptionalHeader;
 	SectionTables sectionTables;
+	ExportDirectory exportDirectory;
+
+	PEWarrior(char* filePath);
+	bool checkPE();
+	int RVAToFOA(DWORD rva);
+	DWORD FOAToRVA(DWORD foa);
+	void injectMessageBoxA32(DWORD funAddress);
+	void injectMessageBoxA32AtEnd(DWORD funAddress);
+	void modifyEntryPoint(DWORD newEntryPoint);
+	void setDllCharcateristic(int position, int value);
+	void setSectionCharacteristic(int indexOfTable, int indeOfBit, int value);
+	void extendLastSection(int size);
+	void addASection(DWORD size);
+	void combineSectonToOne();
+	void inject32(DWORD startFOA, BYTE* shellcode, DWORD length);
+	void reloadFile();
+	void bakFile();
+	DWORD getExportFunctionAddressByName(char* name);
+	DWORD getExportFunctionAddressByOrdinal(DWORD ordinal);
+
+	virtual ~PEWarrior();
+private:
+	char filepath[1024];
+	int pESignatureAddress;
+	int sizeOfImageOptionalHeader;
+	
 
 	fstream* MyFile = new fstream;
 	int getHex(char* address, int size);
@@ -127,6 +157,7 @@ private:
 	bool getPEFileHeader();
 	bool getPEOptionHeader();
 	bool getSectionHeader();
+	bool getExportDirectory();
 	void printTime(WORD timeStamp);
 	
 	DWORD findInjectableSection(int size);

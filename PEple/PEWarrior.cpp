@@ -1,3 +1,7 @@
+// Author: Absolutelycold
+// https://github.com/absolutelycold
+// Date: 03/08/2020
+
 #include "PEWarrior.h"
 #include <time.h>
 
@@ -24,16 +28,13 @@ PEWarrior::PEWarrior(char* filePath)
 		getPEOptionHeader();
 		cout << "------------------------------------------------------------\n" << endl;
 		getSectionHeader();
+		getExportDirectory();
 		BYTE shellCode[] = { 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0xE8, 0x7A, 0x09, 0x8C, 0x76 };
 		//setDllCharcateristic(6, 1);
 		//injectCode32(0x76CC0C30);
 		//DWORD FOA = RVAToFOA(0x00404018);
 		//cout << "FOA: " << hex << FOA << endl;
 		//setSectionCharacteristic(sectionTables.numberOfSections - 1, 29, 1);
-		DWORD injectPointer = findInjectableSection(30);
-		cout << "Injectable Section: " << hex << injectPointer << endl;
-		DWORD injectPointerInMem = FOAToRVA(injectPointer);
-		cout << "Inject Point in Mem: " << hex << injectPointerInMem;
 		
 	}
 }
@@ -96,11 +97,11 @@ bool PEWarrior::checkPE()
 
 int PEWarrior::RVAToFOA(DWORD rva)
 {
-	DWORD rvaOffsetBase = rva - peOptionalHeader.baseAddress;
+	//DWORD rvaOffsetBase = rva - peOptionalHeader.baseAddress;
 	//If RVA in the header reagion, just return it.
-	if (rvaOffsetBase < peOptionalHeader.sizeOfHeaders)
+	if (rva < peOptionalHeader.sizeOfHeaders)
 	{
-		return rvaOffsetBase;
+		return rva;
 	}
 	
 	// check whether RVA is in the each section
@@ -117,10 +118,10 @@ int PEWarrior::RVAToFOA(DWORD rva)
 		}
 
 		// Check whether the RVAOffsetBase is in the section
-		if ((rvaOffsetBase >= sectionTables.tableArray[i].VirtualAddress) && (rvaOffsetBase < (sectionTables.tableArray[i].VirtualAddress + currentSectionSize)))
+		if ((rva >= sectionTables.tableArray[i].VirtualAddress) && (rva < (sectionTables.tableArray[i].VirtualAddress + currentSectionSize)))
 		{
 			
-			DWORD sectionOffset = rvaOffsetBase - sectionTables.tableArray[i].VirtualAddress;
+			DWORD sectionOffset = rva - sectionTables.tableArray[i].VirtualAddress;
 			DWORD FOA = sectionTables.tableArray[i].PointerToRawData + sectionOffset;
 			return FOA;
 		}
@@ -311,6 +312,75 @@ bool PEWarrior::getSectionHeader()
 		cout << "------------------------------------------------------------" << endl;
 	}
 	return false;
+}
+
+bool PEWarrior::getExportDirectory()
+{
+	DWORD RVAOfExportDirectory;
+	if (peFileHeader.machine == 0x14c)
+	{
+		RVAOfExportDirectory = ((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+	}
+	else {
+		RVAOfExportDirectory = ((_IMAGE_OPTIONAL_HEADER64*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+	}
+
+	if (RVAOfExportDirectory == 0)
+	{
+		// No Export Directory
+		return false;
+	}
+
+	DWORD FOAOfExportDirectory = RVAToFOA(RVAOfExportDirectory);
+	//cout << "Export Directory FOA: " << FOAOfExportDirectory << endl;
+
+	exportDirectory.Directory = new _IMAGE_EXPORT_DIRECTORY;
+	MyFile->seekg(FOAOfExportDirectory);
+	MyFile->read((char*)exportDirectory.Directory, sizeof(_IMAGE_EXPORT_DIRECTORY));
+	exportDirectory.RVAOfDllName = exportDirectory.Directory->Name;
+	exportDirectory.RVAOfFAT = exportDirectory.Directory->AddressOfFunctions;
+	exportDirectory.RVAOfFNT = exportDirectory.Directory->AddressOfNames;
+	exportDirectory.RVAOfFOT = exportDirectory.Directory->AddressOfNameOrdinals;
+	exportDirectory.NumberOfFunctions = exportDirectory.Directory->NumberOfFunctions;
+	exportDirectory.NumberOfNames = exportDirectory.Directory->NumberOfNames;
+	exportDirectory.Base = exportDirectory.Directory->Base;
+	char dllName[256];
+	DWORD FOAOfDllName = RVAToFOA(exportDirectory.RVAOfDllName);
+	MyFile->seekg(FOAOfDllName);
+	MyFile->read(dllName, 256);
+	cout << "Dll Name: " << dllName << endl;
+	cout << "Num of Function Names: " << exportDirectory.NumberOfNames << endl;
+	DWORD FOAOfNames = RVAToFOA(exportDirectory.RVAOfFNT);
+	DWORD* functionNamesTable = new DWORD[exportDirectory.NumberOfNames];
+	MyFile->seekg(FOAOfNames);
+	MyFile->read((char*)functionNamesTable, 4 * exportDirectory.NumberOfNames);
+	exportDirectory.FNT = functionNamesTable;
+	WORD* ordinalTable = new WORD[exportDirectory.NumberOfNames];
+	MyFile->seekg(RVAToFOA(exportDirectory.RVAOfFOT));
+	MyFile->read((char*)ordinalTable, sizeof(WORD) * exportDirectory.NumberOfNames);
+	exportDirectory.FOT = ordinalTable;
+	DWORD* functionsAddressTable = new DWORD[exportDirectory.NumberOfFunctions];
+	MyFile->seekg(RVAToFOA(exportDirectory.RVAOfFAT));
+	MyFile->read((char*)functionsAddressTable, sizeof(DWORD) * exportDirectory.NumberOfFunctions);
+	exportDirectory.FAT = functionsAddressTable;
+	char functionName[128];
+	for (int i = 0; i < exportDirectory.NumberOfNames; i++)
+	{
+		MyFile->seekg(RVAToFOA(functionNamesTable[i]));
+		MyFile->read(functionName, 128);
+		cout << "  " << functionName << " : " << hex << functionsAddressTable[ordinalTable[i]] << "(RVA) : " << dec << exportDirectory.Base + ordinalTable[i] << endl;
+		memset(functionName, 0, 128);
+	}
+	MyFile->seekg(FOAOfNames);
+	cout << "Num of Functions: " << exportDirectory.NumberOfFunctions << endl;
+	for (int i = 0; i < exportDirectory.NumberOfFunctions; i++)
+	{
+		if (functionsAddressTable[i] != 0)
+		{
+			cout << dec << exportDirectory.Base + i << " : " << hex << functionsAddressTable[i] << endl;
+		}
+	}
+	return true;
 }
 
 void PEWarrior::printTime(WORD timeStamp)
@@ -578,6 +648,34 @@ void PEWarrior::bakFile()
 	
 }
 
+DWORD PEWarrior::getExportFunctionAddressByName(char* name)
+{
+	char CurrentName[256];
+	for (int i = 0; i < exportDirectory.NumberOfNames; i++)
+	{
+		DWORD NameAddressRVA = (exportDirectory.FNT)[i];
+		DWORD NameAddressFOA = RVAToFOA(NameAddressRVA);
+		MyFile->seekg(NameAddressFOA);
+		MyFile->read((char*)CurrentName, 256);
+		if (strcmp(CurrentName, name) == 0)
+		{
+			return exportDirectory.FAT[exportDirectory.FOT[i]];
+		}
+	}
+	return 0;
+}
+
+DWORD PEWarrior::getExportFunctionAddressByOrdinal(DWORD ordinal)
+{
+
+	if (ordinal > (exportDirectory.Base + exportDirectory.NumberOfFunctions))
+	{
+		return 0;
+	}
+
+	return (exportDirectory.FAT)[ordinal - exportDirectory.Base];
+}
+
 DWORD PEWarrior::findInjectableSection(int size)
 {
 
@@ -752,4 +850,12 @@ void PEWarrior::PEOptionHeader::setHeader(void* headerAddress)
 void* PEWarrior::PEOptionHeader::getHeaeder()
 {
 	return this->peOptionalHeader;
+}
+
+PEWarrior::ExportDirectory::~ExportDirectory()
+{
+	delete[] FNT;
+	delete[] FOT;
+	delete[] FAT;
+	delete Directory;
 }
