@@ -29,6 +29,7 @@ PEWarrior::PEWarrior(char* filePath)
 		cout << "------------------------------------------------------------\n" << endl;
 		getSectionHeader();
 		getExportDirectory();
+		getRelocateTable();
 		BYTE shellCode[] = { 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0xE8, 0x7A, 0x09, 0x8C, 0x76 };
 		//setDllCharcateristic(6, 1);
 		//injectCode32(0x76CC0C30);
@@ -674,6 +675,76 @@ DWORD PEWarrior::getExportFunctionAddressByOrdinal(DWORD ordinal)
 	}
 
 	return (exportDirectory.FAT)[ordinal - exportDirectory.Base];
+}
+
+bool PEWarrior::getRelocateTable()
+{
+	DWORD entryOfRelocateDirectoryRVA;
+	if (peFileHeader.machine == 0x14c)
+	{
+		// 32bit
+		entryOfRelocateDirectoryRVA = ((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress;
+	}
+	else
+	{
+		entryOfRelocateDirectoryRVA = ((_IMAGE_OPTIONAL_HEADER64*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress;
+
+	}
+
+	DWORD entryOfRelocateDirectoryFOA = RVAToFOA(entryOfRelocateDirectoryRVA);
+	_IMAGE_BASE_RELOCATION* relocationTable = new _IMAGE_BASE_RELOCATION;
+	DWORD base;
+	DWORD sizeOfBlock = 0;
+	DWORD currentTableStartFOA = entryOfRelocateDirectoryFOA;
+	do
+	{
+		cout << "----------------------------------------------------" << endl;
+		MyFile->seekg(currentTableStartFOA);
+		MyFile->read((char*)relocationTable, sizeof(_IMAGE_BASE_RELOCATION));
+		base = relocationTable->VirtualAddress;
+		sizeOfBlock = relocationTable->SizeOfBlock;
+
+		if (sizeOfBlock == 0 && relocateDirectory.numberOfPage == 0)
+		{
+			return false;
+		}
+		if (sizeOfBlock != 0)
+		{
+			cout << "Base: " << hex << base << endl;
+			cout << "Size Of Block: " << sizeOfBlock << endl;
+			relocateDirectory.numberOfPage++;
+
+			DWORD numberOfOffset = (sizeOfBlock - 8) / 2;
+			cout << "Items: " << numberOfOffset << endl;
+			WORD* offsetArray = new WORD[numberOfOffset];
+			MyFile->seekg(currentTableStartFOA + 8);
+			MyFile->read((char*)offsetArray, 2 * numberOfOffset);
+			for (int i = 0; i < numberOfOffset; i++)
+			{
+				bitset<16> item(offsetArray[i]);
+				bitset<4> high4;
+				bitset<12> low12;
+				for (int j = 0; j < 4; j++)
+				{
+					high4[j] = item[12 + j];
+				}
+
+				for (int k = 0; k < 12; k++)
+				{
+					low12[k] = item[k];
+				}
+				cout << "RVA: " << base + low12.to_ulong() << "(" << high4.to_ulong() << ")" << endl;
+			}
+			delete[] offsetArray;
+
+			currentTableStartFOA += sizeOfBlock;
+		}
+	} while (sizeOfBlock != 0);
+	
+	cout << "----------------------------------------------------" << endl;
+	
+	delete relocationTable;
+	return true;
 }
 
 DWORD PEWarrior::findInjectableSection(int size)

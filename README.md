@@ -25,8 +25,8 @@
 
 ✔ Combine all sections into one (合并所有节为1个节)
 
+✔ Get Base Relocate Table (获取Base Relocate表)
+
 Pending:
 
 ✖ other Inject Code (其它类型的代码注入)
-
-✖ HOOK

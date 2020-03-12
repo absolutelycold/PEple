@@ -29,6 +29,6 @@ int main()
     peWarrior.setSectionCharacteristic(0, 30, 1);
     peWarrior.setSectionCharacteristic(0, 31, 1);*/
     //cout << "Plus address:" << peWarrior.getExportFunctionAddressByName((char*)"_Divide@8") << endl;
-    cout << peWarrior.getExportFunctionAddressByOrdinal(13) << endl;
+    //cout << peWarrior.getExportFunctionAddressByOrdinal(13) << endl;
     return EXIT_SUCCESS;
 }

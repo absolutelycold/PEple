@@ -119,12 +119,22 @@ public:
 
 	};
 
+	class RelocateDirectory
+	{
+	public:
+		DWORD VirtualAddress;
+		DWORD numberOfPage = 0;
+	private:
+
+	};
+
 	DWORD currentPESignature;
 	DOSPart dosPart;
 	PEFileHeader peFileHeader;
 	PEOptionHeader peOptionalHeader;
 	SectionTables sectionTables;
 	ExportDirectory exportDirectory;
+	RelocateDirectory relocateDirectory;
 
 	PEWarrior(char* filePath);
 	bool checkPE();
@@ -158,6 +168,7 @@ private:
 	bool getPEOptionHeader();
 	bool getSectionHeader();
 	bool getExportDirectory();
+	bool getRelocateTable();
 	void printTime(WORD timeStamp);
 	
 	DWORD findInjectableSection(int size);
