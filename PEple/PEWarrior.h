@@ -125,6 +125,7 @@ public:
 	public:
 		DWORD VirtualAddress;
 		DWORD numberOfPage = 0;
+		bool exist;
 	private:
 
 	};
@@ -155,6 +156,7 @@ public:
 	DWORD getExportFunctionAddressByName(char* name);
 	DWORD getExportFunctionAddressByOrdinal(DWORD ordinal);
 	void moveExportTablesToNewSection();
+	void moveRelocationTablesToNewSection();
 
 	virtual ~PEWarrior();
 private:

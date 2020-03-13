@@ -30,6 +30,7 @@ int main()
     peWarrior.setSectionCharacteristic(0, 31, 1);*/
     //cout << "Plus address:" << peWarrior.getExportFunctionAddressByName((char*)"_Divide@8") << endl;
     //cout << peWarrior.getExportFunctionAddressByOrdinal(13) << endl;
-    peWarrior.moveExportTablesToNewSection();
+    //peWarrior.moveExportTablesToNewSection();
+    //peWarrior.moveRelocationTablesToNewSection();
     return EXIT_SUCCESS;
 }

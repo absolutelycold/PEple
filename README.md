@@ -29,6 +29,8 @@
 
 ✔ Move Export Tables to our own new section, auto modify RVA (移动导出表到自己创建的新section中(自动修正RVA))
 
+✔ Move Relocation tables to our own new section, auto modify RVA
+
 Pending:
 
 ✖ other Inject Code (其它类型的代码注入)

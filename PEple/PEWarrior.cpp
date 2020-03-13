@@ -699,7 +699,7 @@ void PEWarrior::moveExportTablesToNewSection()
 	DWORD FNTFOA = RVAToFOA(exportDirectory.RVAOfFNT);
 	DWORD FOTFOA = RVAToFOA(exportDirectory.RVAOfFOT);
 	DWORD FATFOA = RVAToFOA(exportDirectory.RVAOfFAT);
-	
+
 	DWORD sizeOfNewSection = sizeof(_IMAGE_EXPORT_DIRECTORY) + (4 * exportDirectory.NumberOfFunctions) + (2 * exportDirectory.NumberOfNames) + (4 * (exportDirectory.NumberOfNames));
 	//Calculate length of all function names
 	for (int i = 0; i < exportDirectory.NumberOfNames; i++)
@@ -721,22 +721,22 @@ void PEWarrior::moveExportTablesToNewSection()
 	DWORD currentPointer = PointerToNewSection;
 	DWORD RVAOfNewSection = sectionTables.tableArray[sectionTables.numberOfSections - 1].VirtualAddress;
 
-	MyFile->seekg(currentPointer);
-	MyFile->write((char*)(exportDirectory.FNT), exportDirectory.NumberOfFunctions * 4);
+	MyFile->seekp(currentPointer);
+	MyFile->write((char*)(exportDirectory.FAT), exportDirectory.NumberOfFunctions * 4);
 
 	(exportDirectory.Directory)->AddressOfFunctions = FOAToRVA(currentPointer);
 
 	currentPointer += (exportDirectory.NumberOfFunctions * 4);
 	
 	// Move FOT to new section
-	MyFile->seekg(currentPointer);
+	MyFile->seekp(currentPointer);
 	MyFile->write((char*)(exportDirectory.FOT), 2 * exportDirectory.NumberOfNames);
 	exportDirectory.Directory->AddressOfNameOrdinals = FOAToRVA(currentPointer);
 	
 	currentPointer += (exportDirectory.NumberOfNames * 2);
 	
 	// Move FNT to new section
-	MyFile->seekg(currentPointer);
+	MyFile->seekp(currentPointer);
 	MyFile->write((char*)(exportDirectory.FNT), 4 * exportDirectory.NumberOfNames);
 	(exportDirectory.Directory)->AddressOfNames = FOAToRVA(currentPointer);
 
@@ -750,7 +750,7 @@ void PEWarrior::moveExportTablesToNewSection()
 		MyFile->read(tempChar, 256);
 		DWORD stringlength = strlen(tempChar);
 
-		MyFile->seekg(currentPointer);
+		MyFile->seekp(currentPointer);
 		MyFile->write(tempChar, stringlength + 1); //extra Byte for '\0'
 		
 
@@ -761,10 +761,10 @@ void PEWarrior::moveExportTablesToNewSection()
 	}
 
 	// Write new FNT to FIle
-	MyFile->seekg(PointerToNewSection + (exportDirectory.NumberOfFunctions * 4) + (exportDirectory.NumberOfNames * 2));
+	MyFile->seekp(PointerToNewSection + (exportDirectory.NumberOfFunctions * 4) + (exportDirectory.NumberOfNames * 2));
 	MyFile->write((char*)(exportDirectory.FNT), 4 * exportDirectory.NumberOfNames);
 	// Write export directory to new section£º
-	MyFile->seekg(currentPointer);
+	MyFile->seekp(currentPointer);
 	MyFile->write((char*)(exportDirectory.Directory), sizeof(_IMAGE_EXPORT_DIRECTORY));
 
 	// Modify the entry of export directory
@@ -778,7 +778,62 @@ void PEWarrior::moveExportTablesToNewSection()
 	}
 
 	//Write the new optional header to file
-	MyFile->seekg(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
+	MyFile->write((char*)(peOptionalHeader.getHeaeder()), peFileHeader.sizeOfOptionalHeader);
+}
+
+void PEWarrior::moveRelocationTablesToNewSection()
+{
+	if (!(relocateDirectory.exist))
+	{
+		return;
+	}
+	DWORD RVAOfRelocationTables = relocateDirectory.VirtualAddress;
+	DWORD FOAOfRelocationTables = RVAToFOA(RVAOfRelocationTables);
+
+	DWORD currentPointer = FOAOfRelocationTables;
+	DWORD tableSize = 0;
+	DWORD base;
+	DWORD sizeOfBlock;
+	do
+	{
+		
+		_IMAGE_BASE_RELOCATION relocateTable;
+		MyFile->seekg(currentPointer);
+		MyFile->read((char*)(&relocateTable), sizeof(_IMAGE_BASE_RELOCATION));
+		base = relocateTable.VirtualAddress;
+		sizeOfBlock = relocateTable.SizeOfBlock;
+		if (sizeOfBlock != 0)
+		{
+			tableSize += (sizeOfBlock);
+		}
+		currentPointer += (sizeOfBlock);
+	} while (sizeOfBlock != 0);
+
+	addASection(tableSize);
+	reloadFile();
+
+	DWORD FOAToInsert = sectionTables.tableArray[sectionTables.numberOfSections - 1].PointerToRawData;
+	
+	BYTE* relocateTableBuffer = new BYTE[tableSize];
+	MyFile->seekg(FOAOfRelocationTables);
+	MyFile->read((char*)relocateTableBuffer, tableSize);
+	MyFile->seekp(FOAToInsert);
+	MyFile->write((char*)relocateTableBuffer, tableSize);
+	delete[] relocateTableBuffer;
+
+	// Modify the virtul address of entry of relocation table
+	if (peFileHeader.machine == 0x14c)
+	{
+		((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress = FOAToRVA(FOAToInsert);
+	}
+	else
+	{
+		((_IMAGE_OPTIONAL_HEADER64*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress = FOAToRVA(FOAToInsert);
+	}
+
+	//Write the modified optional header into file
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
 	MyFile->write((char*)(peOptionalHeader.getHeaeder()), peFileHeader.sizeOfOptionalHeader);
 }
 
@@ -797,20 +852,28 @@ bool PEWarrior::getRelocateTable()
 	}
 	if (entryOfRelocateDirectoryRVA == 0)
 	{
-
+		relocateDirectory.exist = false;
 		return false;
 	}
 	DWORD entryOfRelocateDirectoryFOA = RVAToFOA(entryOfRelocateDirectoryRVA);
 	relocateDirectory.VirtualAddress = entryOfRelocateDirectoryRVA;
 	_IMAGE_BASE_RELOCATION* relocationTable = new _IMAGE_BASE_RELOCATION;
+	memset(relocationTable, 0, sizeof(_IMAGE_BASE_RELOCATION));
 	DWORD base;
 	DWORD sizeOfBlock = 0;
 	DWORD currentTableStartFOA = entryOfRelocateDirectoryFOA;
 	do
 	{
+		MyFile->close();
+		MyFile->open(filepath, ios::in | ios::out | ios::binary);
 		cout << "----------------------------------------------------" << endl;
+		//reloadFile();
 		MyFile->seekg(currentTableStartFOA);
-		if (!MyFile->read((char*)relocationTable, sizeof(_IMAGE_BASE_RELOCATION))) {
+		MyFile->read((char*)relocationTable, sizeof(_IMAGE_BASE_RELOCATION));
+		MyFile->seekg(0, ios::end);
+		DWORD fileLength = MyFile->tellg();
+		if (currentTableStartFOA >= fileLength) {
+			relocateDirectory.exist = false;
 			return false;
 		}
 		base = relocationTable->VirtualAddress;
@@ -818,6 +881,7 @@ bool PEWarrior::getRelocateTable()
 
 		if (sizeOfBlock == 0 && relocateDirectory.numberOfPage == 0)
 		{
+			relocateDirectory.exist = false;
 			return false;
 		}
 		if (sizeOfBlock != 0)
@@ -831,6 +895,7 @@ bool PEWarrior::getRelocateTable()
 			WORD* offsetArray = new WORD[numberOfOffset];
 			MyFile->seekg(currentTableStartFOA + 8);
 			if (!MyFile->read((char*)offsetArray, 2 * numberOfOffset)) {
+				relocateDirectory.exist = false;
 				return false;
 			}
 			for (int i = 0; i < numberOfOffset; i++)
@@ -858,6 +923,7 @@ bool PEWarrior::getRelocateTable()
 	cout << "----------------------------------------------------" << endl;
 	
 	delete relocationTable;
+	relocateDirectory.exist = true;
 	return true;
 }
 
