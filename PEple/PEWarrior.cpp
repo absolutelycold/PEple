@@ -30,6 +30,7 @@ PEWarrior::PEWarrior(char* filePath)
 		getSectionHeader();
 		getExportDirectory();
 		getRelocateTable();
+		getImportDirectory();
 		BYTE shellCode[] = { 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0x6A, 0x00, 0xE8, 0x7A, 0x09, 0x8C, 0x76 };
 		//setDllCharcateristic(6, 1);
 		//injectCode32(0x76CC0C30);
@@ -878,7 +879,8 @@ void PEWarrior::changeImageBase32(DWORD newImageBase)
 
 			for (int i = 0; i < numberOfOffset; i++)
 			{
-				
+				MyFile->close();
+				MyFile->open(filepath ,ios::binary | ios::in | ios::out);
 				bitset<16> offsetWithCharacter(offsetTable[i]);
 				bitset<4> high4;
 				bitset<12> low12;
@@ -924,11 +926,96 @@ void PEWarrior::changeImageBase32(DWORD newImageBase)
 		
 
 		pointerOfCurrentPosition += sizeOfBlock;
-		
 	} while (sizeOfBlock != 0);
 	
 
 }
+
+void PEWarrior::getImportDirectory()
+{
+	MyFile->close();
+	MyFile->open(filepath);
+	if (peFileHeader.machine == 0x14)
+	{
+		importDirectory.entryOfImportDirectory = ((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+	}
+	else
+	{
+		importDirectory.entryOfImportDirectory = ((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+	}
+
+	_IMAGE_IMPORT_DESCRIPTOR importDescriptor;
+
+	DWORD nameRVA;
+	DWORD RVAOfINT;
+	DWORD RVAOfIAT;
+	
+	DWORD currentPointer = RVAToFOA(importDirectory.entryOfImportDirectory);
+	do
+	{
+		MyFile->seekg(currentPointer);
+		MyFile->read((char*)(&importDescriptor), sizeof(_IMAGE_IMPORT_DESCRIPTOR));
+		nameRVA = importDescriptor.Name;
+		RVAOfINT = importDescriptor.OriginalFirstThunk;
+		RVAOfIAT = importDescriptor.FirstThunk;
+		if (RVAOfINT != 0)
+		{
+			DWORD nameFOA = RVAToFOA(nameRVA);
+
+			char moduleName[128];
+			MyFile->seekg(nameFOA);
+			MyFile->read(moduleName, 128);
+			cout << "Module: " << moduleName << endl;
+			
+			// scan the INT
+			DWORD FOAOfINT = RVAToFOA(RVAOfINT);
+			DWORD currentINTPointer = FOAOfINT;
+			DWORD thunkData; // DWORD for 32 bit, ULONGLONG for 64 bit
+			do
+			{
+				MyFile->close();
+				MyFile->open(filepath, ios::binary | ios::in | ios::out);
+				MyFile->seekg(currentINTPointer);
+				MyFile->read((char*)(&thunkData), 4);
+				if (thunkData != 0)
+				{
+					bitset<32> thunkDataBinary(thunkData);
+					int high = thunkDataBinary[0];
+					if (high == 0)
+					{
+						// import by name
+						char importFunName[128];
+						WORD hint = (WORD)(*(importFunName));
+						char* trueImportName = importFunName + sizeof(WORD);
+						DWORD FOAOfFunName = RVAToFOA(thunkData);
+						MyFile->seekg(FOAOfFunName);
+						MyFile->read(importFunName, 128);
+						cout << "By Name: " << trueImportName << "; Hint: " << dec << hint << endl;
+					}
+					else
+					{
+						// import by ordinals
+						bitset<31> ordinalBinary;
+						for (int i = 0; i < 31; i++)
+						{
+							ordinalBinary[i] = thunkDataBinary[1 + i];
+						}
+						DWORD funcOrdinal = ordinalBinary.to_ulong();
+						cout << "By ordinal: " << funcOrdinal << endl;
+					}
+				}
+				currentINTPointer += 4;
+			} while (thunkData != 0);
+
+			
+		}
+		currentPointer += sizeof(_IMAGE_IMPORT_DESCRIPTOR);
+	} while (RVAOfINT != 0);
+	
+
+
+}
+
 
 bool PEWarrior::getRelocateTable()
 {

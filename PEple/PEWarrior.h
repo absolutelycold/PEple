@@ -130,6 +130,15 @@ public:
 
 	};
 
+	class ImportDirectory
+	{
+	public:
+		DWORD entryOfImportDirectory;
+
+	private:
+
+	};
+
 	DWORD currentPESignature;
 	DOSPart dosPart;
 	PEFileHeader peFileHeader;
@@ -137,6 +146,8 @@ public:
 	SectionTables sectionTables;
 	ExportDirectory exportDirectory;
 	RelocateDirectory relocateDirectory;
+	ImportDirectory importDirectory;
+	
 
 	PEWarrior(char* filePath);
 	bool checkPE();
@@ -158,6 +169,7 @@ public:
 	void moveExportTablesToNewSection();
 	void moveRelocationTablesToNewSection();
 	void changeImageBase32(DWORD newImageBase);
+	void getImportDirectory();
 
 	virtual ~PEWarrior();
 private:
