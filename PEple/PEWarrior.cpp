@@ -810,6 +810,8 @@ void PEWarrior::moveRelocationTablesToNewSection()
 		currentPointer += (sizeOfBlock);
 	} while (sizeOfBlock != 0);
 
+	tableSize += sizeof(_IMAGE_BASE_RELOCATION);
+
 	addASection(tableSize);
 	reloadFile();
 
@@ -835,6 +837,97 @@ void PEWarrior::moveRelocationTablesToNewSection()
 	//Write the modified optional header into file
 	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
 	MyFile->write((char*)(peOptionalHeader.getHeaeder()), peFileHeader.sizeOfOptionalHeader);
+}
+
+void PEWarrior::changeImageBase32(DWORD newImageBase)
+{
+	
+	DWORD orginalImageBase = ((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->ImageBase;
+	// Modify the Image Base to new one
+	((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->ImageBase = newImageBase;
+	// Write to file
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
+	MyFile->write((char*)(peOptionalHeader.getHeaeder()), peFileHeader.sizeOfOptionalHeader);
+
+	// fix all the address in the relocate tables
+	DWORD RVAOfBaseRelocateTables = relocateDirectory.VirtualAddress;
+	DWORD FOAOfBaseRelocateTables = RVAToFOA(RVAOfBaseRelocateTables);
+
+	DWORD base;
+	DWORD sizeOfBlock;
+	DWORD pointerOfCurrentPosition = FOAOfBaseRelocateTables;
+
+	do
+	{
+		MyFile->close();
+		MyFile->open(filepath, ios::in | ios::out | ios::binary);
+		_IMAGE_BASE_RELOCATION baseRelocationTable;
+		MyFile->seekg(pointerOfCurrentPosition);
+		MyFile->read((char*)(&baseRelocationTable), sizeof(_IMAGE_BASE_RELOCATION));
+		base = baseRelocationTable.VirtualAddress;
+		sizeOfBlock = baseRelocationTable.SizeOfBlock;
+		
+		if (sizeOfBlock != 0)
+		{
+		
+			DWORD numberOfOffset = (sizeOfBlock - 8) / 2;
+			WORD* offsetTable = new WORD[numberOfOffset];
+
+			MyFile->seekg(pointerOfCurrentPosition + 8);
+			MyFile->read((char*)offsetTable, numberOfOffset * 2);
+
+			for (int i = 0; i < numberOfOffset; i++)
+			{
+				
+				bitset<16> offsetWithCharacter(offsetTable[i]);
+				bitset<4> high4;
+				bitset<12> low12;
+				for (int i = 0; i < 4; i++)
+				{
+					high4[i] = offsetWithCharacter[12 + i];
+				}
+
+				for (int i = 0; i < 12; i++)
+				{
+					low12[i] = offsetWithCharacter[i];
+				}
+
+				DWORD offsetNoCharacteristic = low12.to_ulong();
+				DWORD characteristic = high4.to_ulong();
+
+				if (characteristic == 3)
+				{
+					DWORD RVAOfRelocationAddress = base + offsetNoCharacteristic;
+					DWORD FOAOfRelocationAddress = RVAToFOA(RVAOfRelocationAddress);
+					// Fix base relocation table
+					DWORD pendingToFixedAddress;
+					
+					MyFile->close();
+					MyFile->open(filepath, ios::in | ios::out | ios::binary);
+					MyFile->seekg(FOAOfRelocationAddress);
+					MyFile->read((char*)&pendingToFixedAddress, 4);
+					
+					pendingToFixedAddress = pendingToFixedAddress - orginalImageBase + newImageBase;
+					
+					MyFile->close();
+					MyFile->open(filepath, ios::in | ios::out | ios::binary);
+					MyFile->seekp(FOAOfRelocationAddress);
+					MyFile->write((char*)&pendingToFixedAddress, 4);
+					
+				}
+				
+			}
+			
+			delete[] offsetTable;
+			
+		}
+		
+
+		pointerOfCurrentPosition += sizeOfBlock;
+		
+	} while (sizeOfBlock != 0);
+	
+
 }
 
 bool PEWarrior::getRelocateTable()

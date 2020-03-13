@@ -32,5 +32,6 @@ int main()
     //cout << peWarrior.getExportFunctionAddressByOrdinal(13) << endl;
     //peWarrior.moveExportTablesToNewSection();
     //peWarrior.moveRelocationTablesToNewSection();
+    //peWarrior.changeImageBase32(0x7000000);
     return EXIT_SUCCESS;
 }

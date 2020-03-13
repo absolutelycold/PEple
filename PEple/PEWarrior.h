@@ -157,6 +157,7 @@ public:
 	DWORD getExportFunctionAddressByOrdinal(DWORD ordinal);
 	void moveExportTablesToNewSection();
 	void moveRelocationTablesToNewSection();
+	void changeImageBase32(DWORD newImageBase);
 
 	virtual ~PEWarrior();
 private:

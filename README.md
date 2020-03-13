@@ -27,9 +27,11 @@
 
 ✔ Get Base Relocate Table (获取Base Relocate表)
 
-✔ Move Export Tables to our own new section, auto modify RVA (移动导出表到自己创建的新section中(自动修正RVA))
+✔ Move Export Tables to our own new section, auto modify RVA (移动导出表到自己创建的新section中(自动修改导出表入口，FNT入口，FOT入口，FAT入口，自动将Name放到自创的Section中，自动修复FNT))
 
-✔ Move Relocation tables to our own new section, auto modify RVA
+✔ Move Relocation tables to our own new section, auto modify RVA (重定位表放到自己创建的section中，并且自动修改重定位表入口)
+
+✔ Customize Base Image (Auto fix address in base relocation table): 自定义dll文件的入口，自动修复重定位表里面的地址。
 
 Pending:
 
