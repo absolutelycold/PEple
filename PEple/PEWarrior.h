@@ -112,6 +112,7 @@ public:
 		DWORD* FNT;
 		WORD* FOT;
 		DWORD* FAT;
+		bool exist;
 
 		~ExportDirectory();
 
@@ -153,6 +154,7 @@ public:
 	void bakFile();
 	DWORD getExportFunctionAddressByName(char* name);
 	DWORD getExportFunctionAddressByOrdinal(DWORD ordinal);
+	void moveExportTablesToNewSection();
 
 	virtual ~PEWarrior();
 private:

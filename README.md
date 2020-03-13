@@ -27,6 +27,10 @@
 
 ✔ Get Base Relocate Table (获取Base Relocate表)
 
+✔ Move Export Tables to our own new section, auto modify RVA (移动导出表到自己创建的新section中(自动修正RVA))
+
 Pending:
 
 ✖ other Inject Code (其它类型的代码注入)
+
+✖ inject our own dll (让exe加载我们自己的dll)

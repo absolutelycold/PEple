@@ -329,6 +329,7 @@ bool PEWarrior::getExportDirectory()
 	if (RVAOfExportDirectory == 0)
 	{
 		// No Export Directory
+		exportDirectory.exist = false;
 		return false;
 	}
 
@@ -381,6 +382,8 @@ bool PEWarrior::getExportDirectory()
 			cout << dec << exportDirectory.Base + i << " : " << hex << functionsAddressTable[i] << endl;
 		}
 	}
+
+	exportDirectory.exist = true;
 	return true;
 }
 
@@ -675,6 +678,108 @@ DWORD PEWarrior::getExportFunctionAddressByOrdinal(DWORD ordinal)
 	}
 
 	return (exportDirectory.FAT)[ordinal - exportDirectory.Base];
+}
+
+void PEWarrior::moveExportTablesToNewSection()
+{
+	if (!(exportDirectory.exist))
+	{
+		return;
+	}
+	DWORD entryOFExportDirectoryRVA;
+	if (peFileHeader.machine == 0x14c)
+	{
+		entryOFExportDirectoryRVA = ((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+	}
+	else
+	{
+		entryOFExportDirectoryRVA = ((_IMAGE_OPTIONAL_HEADER64*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+	}
+
+	DWORD FNTFOA = RVAToFOA(exportDirectory.RVAOfFNT);
+	DWORD FOTFOA = RVAToFOA(exportDirectory.RVAOfFOT);
+	DWORD FATFOA = RVAToFOA(exportDirectory.RVAOfFAT);
+	
+	DWORD sizeOfNewSection = sizeof(_IMAGE_EXPORT_DIRECTORY) + (4 * exportDirectory.NumberOfFunctions) + (2 * exportDirectory.NumberOfNames) + (4 * (exportDirectory.NumberOfNames));
+	//Calculate length of all function names
+	for (int i = 0; i < exportDirectory.NumberOfNames; i++)
+	{
+		char tempChar[256];
+		MyFile->seekg(RVAToFOA((exportDirectory.FNT)[i]));
+		MyFile->read(tempChar, 256);
+		sizeOfNewSection += (strlen(tempChar) + 1); // We need an extra byte to fill \0
+	}
+
+	// Add a new section
+	addASection(sizeOfNewSection);
+
+	
+	
+	// Move FAT To new section
+	reloadFile();
+	DWORD PointerToNewSection = sectionTables.tableArray[sectionTables.numberOfSections - 1].PointerToRawData;
+	DWORD currentPointer = PointerToNewSection;
+	DWORD RVAOfNewSection = sectionTables.tableArray[sectionTables.numberOfSections - 1].VirtualAddress;
+
+	MyFile->seekg(currentPointer);
+	MyFile->write((char*)(exportDirectory.FNT), exportDirectory.NumberOfFunctions * 4);
+
+	(exportDirectory.Directory)->AddressOfFunctions = FOAToRVA(currentPointer);
+
+	currentPointer += (exportDirectory.NumberOfFunctions * 4);
+	
+	// Move FOT to new section
+	MyFile->seekg(currentPointer);
+	MyFile->write((char*)(exportDirectory.FOT), 2 * exportDirectory.NumberOfNames);
+	exportDirectory.Directory->AddressOfNameOrdinals = FOAToRVA(currentPointer);
+	
+	currentPointer += (exportDirectory.NumberOfNames * 2);
+	
+	// Move FNT to new section
+	MyFile->seekg(currentPointer);
+	MyFile->write((char*)(exportDirectory.FNT), 4 * exportDirectory.NumberOfNames);
+	(exportDirectory.Directory)->AddressOfNames = FOAToRVA(currentPointer);
+
+	currentPointer += (exportDirectory.NumberOfNames * 4);
+
+	// Move all function names to new section
+	for (int i = 0; i < exportDirectory.NumberOfNames; i++)
+	{
+		char tempChar[256];
+		MyFile->seekg(RVAToFOA((exportDirectory.FNT)[i]));
+		MyFile->read(tempChar, 256);
+		DWORD stringlength = strlen(tempChar);
+
+		MyFile->seekg(currentPointer);
+		MyFile->write(tempChar, stringlength + 1); //extra Byte for '\0'
+		
+
+		// Modify the RVA in the FNT
+		(exportDirectory.FNT)[i] = FOAToRVA(currentPointer);
+
+		currentPointer += (stringlength + 1);
+	}
+
+	// Write new FNT to FIle
+	MyFile->seekg(PointerToNewSection + (exportDirectory.NumberOfFunctions * 4) + (exportDirectory.NumberOfNames * 2));
+	MyFile->write((char*)(exportDirectory.FNT), 4 * exportDirectory.NumberOfNames);
+	// Write export directory to new section£º
+	MyFile->seekg(currentPointer);
+	MyFile->write((char*)(exportDirectory.Directory), sizeof(_IMAGE_EXPORT_DIRECTORY));
+
+	// Modify the entry of export directory
+	if (peFileHeader.machine == 0x14c)
+	{
+		((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress = FOAToRVA(currentPointer);
+	}
+	else
+	{
+		((_IMAGE_OPTIONAL_HEADER64*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress = FOAToRVA(currentPointer);
+	}
+
+	//Write the new optional header to file
+	MyFile->seekg(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
+	MyFile->write((char*)(peOptionalHeader.getHeaeder()), peFileHeader.sizeOfOptionalHeader);
 }
 
 bool PEWarrior::getRelocateTable()
