@@ -1051,12 +1051,25 @@ void PEWarrior::injectDll32(char* dllName)
 
 	// add a new section
 	// We need create our own import descriptor into the new section
-	addASection(sizeOfImprtDiscriptors + sizeof(_IMAGE_IMPORT_DESCRIPTOR) + 8 + 8 + 256);
+	addASection(sizeOfImprtDiscriptors + sizeof(_IMAGE_IMPORT_DESCRIPTOR) + 8 + 8 + 512);
 	reloadFile();
 
 	// get Insert FOA
 	DWORD insertFOA = sectionTables.tableArray[sectionTables.numberOfSections - 1].PointerToRawData;
 	DWORD movePointer = insertFOA;
+
+	// set all bytes in our own section be zero, clear program
+	MyFile->seekg(0, ios::end);
+	DWORD fileLength = MyFile->tellg();
+	BYTE byteZero = 0;
+	MyFile->close();
+	MyFile->open(filepath);
+	MyFile->seekp(insertFOA);
+	for (int i = insertFOA; i < fileLength; i++)
+	{
+		MyFile->write((char*)(&byteZero), 1);
+	}
+
 	// move import discriptor
 	MyFile->seekg(importeDiscriptorEntryFOA);
 	BYTE* importData = new BYTE[sizeOfImprtDiscriptors];
@@ -1090,6 +1103,7 @@ void PEWarrior::injectDll32(char* dllName)
 	DWORD FOAOfNewIAT = movePointer + 8;
 
 	// Write to file
+
 	newImportDiscriptor.Name = FOAToRVA(FOAofDllName);
 	newImportDiscriptor.OriginalFirstThunk = FOAToRVA(FOAOfNewINT);
 	newImportDiscriptor.FirstThunk = FOAToRVA(FOAOfNewIAT);
@@ -1099,6 +1113,9 @@ void PEWarrior::injectDll32(char* dllName)
 
 	MyFile->seekp(FOAofDllName);
 	MyFile->write(dllName, dllLength + 1);
+
+	
+	DWORD zero = 0;
 
 	MyFile->seekp(FOAOfNewINT);
 	MyFile->write((char*)(&randomOrdinal), 4);
