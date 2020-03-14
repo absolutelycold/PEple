@@ -33,5 +33,7 @@ int main()
     //peWarrior.moveExportTablesToNewSection();
     //peWarrior.moveRelocationTablesToNewSection();
     //peWarrior.changeImageBase32(0x7000000);
+
+    //peWarrior.injectDll32((char*)"Inject.dll");
     return EXIT_SUCCESS;
 }

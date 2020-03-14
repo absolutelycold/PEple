@@ -170,6 +170,7 @@ public:
 	void moveRelocationTablesToNewSection();
 	void changeImageBase32(DWORD newImageBase);
 	void getImportDirectory();
+	void injectDll32(char* dllName);
 
 	virtual ~PEWarrior();
 private:

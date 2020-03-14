@@ -980,7 +980,7 @@ void PEWarrior::getImportDirectory()
 				if (thunkData != 0)
 				{
 					bitset<32> thunkDataBinary(thunkData);
-					int high = thunkDataBinary[0];
+					int high = thunkDataBinary[31];
 					if (high == 0)
 					{
 						// import by name
@@ -990,18 +990,14 @@ void PEWarrior::getImportDirectory()
 						DWORD FOAOfFunName = RVAToFOA(thunkData);
 						MyFile->seekg(FOAOfFunName);
 						MyFile->read(importFunName, 128);
-						cout << "By Name: " << trueImportName << "; Hint: " << dec << hint << endl;
+						cout << "  By Name: " << trueImportName << "; Hint: " << dec << hint << endl;
 					}
 					else
 					{
 						// import by ordinals
-						bitset<31> ordinalBinary;
-						for (int i = 0; i < 31; i++)
-						{
-							ordinalBinary[i] = thunkDataBinary[1 + i];
-						}
-						DWORD funcOrdinal = ordinalBinary.to_ulong();
-						cout << "By ordinal: " << funcOrdinal << endl;
+						thunkDataBinary[31] = 0;
+						DWORD funcOrdinal = thunkDataBinary.to_ulong();
+						cout << "  By ordinal: " << funcOrdinal << endl;
 					}
 				}
 				currentINTPointer += 4;
@@ -1014,6 +1010,109 @@ void PEWarrior::getImportDirectory()
 	
 
 
+}
+
+void PEWarrior::injectDll32(char* dllName)
+{
+
+	// Find the RVA of import discriptor entry
+	DWORD importeDiscriptorEntryRVA = ((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+	DWORD importeDiscriptorEntryFOA = RVAToFOA(importeDiscriptorEntryRVA);
+
+	DWORD dllNameRVA;
+	DWORD INTRVA;
+	DWORD IATRVA;
+	DWORD currentPointer = importeDiscriptorEntryFOA;
+
+	DWORD sizeOfImprtDiscriptors = 0;
+	do
+	{
+		MyFile->close();
+		MyFile->open(filepath, ios::in | ios::out | ios::binary);
+		MyFile->seekg(currentPointer);
+		_IMAGE_IMPORT_DESCRIPTOR importDiscriptor;
+		MyFile->read((char*)(&importDiscriptor), sizeof(_IMAGE_IMPORT_DESCRIPTOR));
+
+		dllNameRVA = importDiscriptor.Name;
+		INTRVA = importDiscriptor.OriginalFirstThunk;
+		IATRVA = importDiscriptor.FirstThunk;
+		if (INTRVA != 0)
+		{
+			char dllname[128];
+			MyFile->seekg(RVAToFOA(dllNameRVA));
+			MyFile->read(dllname, 128);
+
+			cout << dllname << endl;
+		}
+		currentPointer += sizeof(_IMAGE_IMPORT_DESCRIPTOR);
+		sizeOfImprtDiscriptors += sizeof(_IMAGE_IMPORT_DESCRIPTOR); // Include the 0 structure
+	} while (INTRVA != 0);
+	
+
+	// add a new section
+	// We need create our own import descriptor into the new section
+	addASection(sizeOfImprtDiscriptors + sizeof(_IMAGE_IMPORT_DESCRIPTOR) + 8 + 8 + 256);
+	reloadFile();
+
+	// get Insert FOA
+	DWORD insertFOA = sectionTables.tableArray[sectionTables.numberOfSections - 1].PointerToRawData;
+	DWORD movePointer = insertFOA;
+	// move import discriptor
+	MyFile->seekg(importeDiscriptorEntryFOA);
+	BYTE* importData = new BYTE[sizeOfImprtDiscriptors];
+	MyFile->read((char*)importData, sizeOfImprtDiscriptors);
+
+	MyFile->seekp(insertFOA);
+	MyFile->write((char*)importData, sizeOfImprtDiscriptors);
+	// Change the entry virtual address
+	((_IMAGE_OPTIONAL_HEADER*)(peOptionalHeader.getHeaeder()))->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress = sectionTables.tableArray[sectionTables.numberOfSections - 1].VirtualAddress;
+	MyFile->seekp(dosPart.positionOfPESignature + 4 + sizeof(_IMAGE_FILE_HEADER));
+	MyFile->write((char*)(peOptionalHeader.getHeaeder()), peFileHeader.sizeOfOptionalHeader);
+	movePointer += sizeOfImprtDiscriptors;
+
+	// Create our own import discriptor
+	DWORD FOAOfNewImportDescriptor = movePointer - sizeof(_IMAGE_IMPORT_DESCRIPTOR); // fill the zero area
+	_IMAGE_IMPORT_DESCRIPTOR newImportDiscriptor;
+	memset(&newImportDiscriptor, 0, sizeof(_IMAGE_IMPORT_DESCRIPTOR));
+	movePointer += sizeof(_IMAGE_IMPORT_DESCRIPTOR); // jump over the zero area
+
+	// Create INT, IAT:
+	// dll Name:
+	DWORD FOAofDllName = movePointer;
+	DWORD dllLength = strlen(dllName);
+	movePointer += (dllLength + 1);
+
+	// Random ordinal
+	DWORD randomOrdinal = 0x80000001;
+
+	// INT, IAT
+	DWORD FOAOfNewINT = movePointer;
+	DWORD FOAOfNewIAT = movePointer + 8;
+
+	// Write to file
+	newImportDiscriptor.Name = FOAToRVA(FOAofDllName);
+	newImportDiscriptor.OriginalFirstThunk = FOAToRVA(FOAOfNewINT);
+	newImportDiscriptor.FirstThunk = FOAToRVA(FOAOfNewIAT);
+
+	MyFile->seekp(FOAOfNewImportDescriptor);
+	MyFile->write((char*)(&newImportDiscriptor), sizeof(_IMAGE_IMPORT_DESCRIPTOR));
+
+	MyFile->seekp(FOAofDllName);
+	MyFile->write(dllName, dllLength + 1);
+
+	MyFile->seekp(FOAOfNewINT);
+	MyFile->write((char*)(&randomOrdinal), 4);
+
+	MyFile->seekp(FOAOfNewIAT);
+	MyFile->write((char*)(&randomOrdinal), 4);
+
+	
+	setSectionCharacteristic(sectionTables.numberOfSections - 1, 31, 1);
+
+
+	
+
+	delete[] importData;
 }
 
 
